@@ -52,12 +52,12 @@ def fetch_news(news_key, keywords=None, sources=None, hours_back=24):
             print(f"Error fetching news: {news_data.get('message')}")
             return None
 
+    except requests.exceptions.Timeout:
+        print("The request took too long and timed out!")
     except requests.exceptions.HTTPError as http_err:
         print(f"HTTP error occurred: {http_err}")
     except requests.exceptions.RequestException as err:
-        print(f"A network error occurred: {err}")
-    except requests.exceptions.Timeout:
-        print("The request took too long and timed out!")
+        print(f"A general network error occurred: {err}")
     
     return None
 
@@ -74,7 +74,7 @@ if __name__ == "__main__":
 
     articles = fetch_news(
         news_key=NEWS_API_KEY, 
-        keywords=["gaza", "lebaon", "iran", "yemen", "syria", "iraq", "saudi arabia"],
+        keywords=["gaza", "lebanon", "iran", "yemen", "syria", "iraq", "saudi arabia"],
         sources=valid_sources,
         hours_back=48
     )
