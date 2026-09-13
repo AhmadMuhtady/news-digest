@@ -21,7 +21,7 @@ from utils import get_source_name
 
 load_dotenv()
 
-GROQ_KEY = os.getenv("GROQ_API_KEY")
+GROQ_KEY = os.getenv("GROQAI_API_KEY")
 
 
 def get_groq_client():
@@ -56,23 +56,25 @@ def fetch_active_chat_models():
 def hydrate_citations(text, articles):
     """
     Post-processing regex substitution:
-    Replaces index citations like [47], 【47】, or [Article 47] 
-    with ground-truth hyperlinked Markdown sources: ([Source Name](URL)).
+    Replaces index citations like [47], 【47】, or [10, 23, 33]
+    with ground-truth hyperlinked Markdown sources.
     """
     def replace_match(match):
-        try:
-            idx = int(match.group(1))
-            if 1 <= idx <= len(articles):
-                art = articles[idx - 1]
-                source_name = get_source_name(art)
-                url = art.get("url") or art.get("link") or "#"
-                return f" ([{source_name}]({url}))"
-        except (ValueError, IndexError):
-            pass
-        return match.group(0)
+        ids = re.findall(r'\d+', match.group(1))
+        links = []
+        for sid in ids:
+            try:
+                idx = int(sid)
+                if 1 <= idx <= len(articles):
+                    art = articles[idx - 1]
+                    source_name = get_source_name(art)
+                    url = art.get("url") or art.get("link") or "#"
+                    links.append(f"[{source_name}]({url})")
+            except (ValueError, IndexError):
+                continue
+        return " (" + ") (".join(links) + ")" if links else match.group(0)
 
-
-    pattern = r'(?:\[\vert{}【)(?:Article\s*)?(\d+)(?:\]|】)'
+    pattern = r'(?:\[|【)(?:Article\s*)?(\d+(?:\s*,\s*\d+)*)(?:\]|】)'
     return re.sub(pattern, replace_match, text)
 
 
@@ -125,30 +127,69 @@ def synthesize_briefing(model_choice):
             messages=messages,
             temperature=0.2,
             max_tokens=8192,
-            stream=True
+            stream=True,
         )
 
         raw_accumulated_text = ""
         for chunk in response:
             content = chunk.choices[0].delta.content or ""
             raw_accumulated_text += content
-            
-
             hydrated_text = hydrate_citations(raw_accumulated_text, articles)
             yield hydrated_text
 
-    except Exception as e:
+        # ← canary goes HERE: after the for loop, still inside try
+        leftover = re.findall(
+            r'(?:\[|【)\d+(?:\s*,\s*\d+)*(?:\]|】)',
+            raw_accumulated_text,
+        )
+        if leftover:
+            warning = (
+                f"\n\n---\n\n> ⚠️ **{len(leftover)} citation(s) failed to hydrate:** "
+                f"`{', '.join(leftover[:5])}`"
+                + (" …" if len(leftover) > 5 else "")
+            )
+            yield hydrate_citations(raw_accumulated_text, articles) + warning
+
+    except Exception as e:  # ← unchanged, same level as try
         yield f"❌ **Groq API Execution Error ({model_choice}):**\n\n```text\n{str(e)}\n```"
 
+
+def bootstrap_pipeline_if_empty():
+    """
+    Runs fetch + dedupe on startup only when there's no cached dataset.
+    Returns (count_label, source_file_label, status_label) for UI init.
+    """
+    articles, metadata = load_deduped_data()
+
+    if articles:
+        return (
+            f"{len(articles)} clean articles",
+            metadata.get("source_raw_file", "None") if metadata else "None",
+            "Loaded cached dataset. Click Generate, or Refresh to fetch new.",
+        )
+
+    print("No cached data found — running initial fetch + dedupe...")
+    try:
+        status_msg, count_msg, source_file = refresh_pipeline()
+        # refresh_pipeline returns the full deduped path; show basename for the box
+        return (
+            count_msg,
+            os.path.basename(source_file) if source_file and source_file != "N/A" else "—",
+            status_msg,
+        )
+    except Exception as e:
+        return (
+            "0 (bootstrap failed)",
+            "—",
+            f"⚠️ Auto-pipeline failed on startup: {e}. Click 'Fetch & Dedupe Fresh News' to retry.",
+        )
 
 def build_ui():
     """Constructs the Gradio Blocks layout."""
     active_models = fetch_active_chat_models()
     
 
-    articles, metadata = load_deduped_data()
-    initial_count = f"{len(articles)} clean articles" if articles else "0 clean articles"
-    initial_file = metadata.get("source_raw_file", "None") if metadata else "None"
+    initial_count, initial_file, initial_status = bootstrap_pipeline_if_empty()
 
     with gr.Blocks(title="Middle East News Intelligence", theme=gr.themes.Soft()) as demo:
         gr.Markdown("# 📰 Middle East Executive Intelligence Digest")
@@ -159,7 +200,7 @@ def build_ui():
             with gr.Column(scale=1):
                 gr.Markdown("### Pipeline Control")
                 
-                status_box = gr.Textbox(label="Pipeline Log", value="System Ready.", interactive=False)
+                status_box = gr.Textbox(label="Pipeline Log", value=initial_status, interactive=False)
                 art_count_box = gr.Textbox(label="Active Articles", value=initial_count, interactive=False)
                 source_file_box = gr.Textbox(label="Active File", value=initial_file, interactive=False)
 
