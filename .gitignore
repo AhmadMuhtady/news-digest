@@ -12,6 +12,10 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 
+# Fetched/exported data snapshots
+data/
+output/
+
 # Jupyter
 .ipynb_checkpoints/
 
