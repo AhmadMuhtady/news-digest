@@ -72,11 +72,15 @@ def fetch_news(news_key, keywords=None, sources=None, hours_back=24):
     return None, None
 
 
-def save_articles_to_json(articles, query_metadata=None, output_dir="data"):
-    """Saves fetched articles and complete request metadata to disk."""
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_DATA_DIR = os.path.join(BASE_DIR, "data")
+
+def save_articles_to_json(articles, query_metadata=None, output_dir=DEFAULT_DATA_DIR):
     if articles is None:
         print("No article payload to export (articles is None).")
         return None
+
 
     os.makedirs(output_dir, exist_ok=True)
     
@@ -100,7 +104,6 @@ def save_articles_to_json(articles, query_metadata=None, output_dir="data"):
     except IOError as e:
         print(f"Failed to export articles to JSON: {e}")
         return None
-
 
 if __name__ == "__main__":
     valid_sources = [
