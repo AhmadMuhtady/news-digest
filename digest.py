@@ -28,23 +28,18 @@ def load_deduped_data(filepath=INPUT_FILE):
 
 
 def generate_llm_prompt(articles):
-    """
-    Formats raw articles into a clean text block designed specifically
-    to guide an LLM in clustering multifaceted news stories with strict citations.
-    """
     article_blocks = []
     for idx, art in enumerate(articles, 1):
-        source = get_source_name(art)
+        source = art.get("source", "Source")
         title = art.get("title", "Untitled")
-        desc = (art.get("description") or "No description available.").strip()
+        desc = (art.get("description") or "No description.").strip()
         pub_date = art.get("publishedAt", "")[:10]
-        url = art.get("url", "#")
         
+        # Omit the full URL from the prompt block to save context window space
         block = (
             f"[{idx}] SOURCE: {source} ({pub_date})\n"
             f"    TITLE: {title}\n"
-            f"    SUMMARY: {desc}\n"
-            f"    URL: {url}"
+            f"    SUMMARY: {desc}"
         )
         article_blocks.append(block)
 
@@ -63,17 +58,14 @@ def generate_llm_prompt(articles):
 
 --- END RAW ARTICLES ---
 
-CRITICAL FORMATTING & CITATION INSTRUCTIONS:
-1. MANDATORY INLINE CITATIONS: Every factual claim or summary bullet MUST include an inline Markdown hyperlink to its original article URL.
-   Format: [Source Name](URL)
-   Example: "Houthi forces seized key coastal positions in Yemen ([Al Jazeera](https://example.com/art1))."
-   Do NOT invent URLs; use the exact URL provided in the raw articles list above.
+CRITICAL CITATION & FORMATTING INSTRUCTIONS:
+1. INDEX CITATIONS ONLY: You MUST cite every factual claim using the bracketed integer ID of the article [N].
+   Example: "Houthi forces seized key coastal positions in Yemen [47]."
+   Do NOT attempt to write full Markdown links or raw URLs. ONLY output [N] where N is the numeric index.
 
-2. EXECUTIVE TAKEAWAYS: Start with EXACTLY 3 bullet points under an "## Executive Takeaways" header. Do NOT use Markdown tables for takeaways.
+2. EXECUTIVE TAKEAWAYS: Start with EXACTLY 3 bullet points under an "## Executive Takeaways" header.
 
-3. THEMATIC CLUSTERING: Do NOT summarize article-by-article. Group multi-angle coverage into major thematic sections (e.g., "### 1. Red Sea Escalation & Economic Shockwaves", "### 2. Regional Diplomatic Maneuvering").
-
-4. NARRATIVE SYNTHESIS: Combine different facts from multiple sources into a single fluid narrative per topic. Mention conflicting updates or different angles explicitly with citations.
+3. THEMATIC CLUSTERING: Group multi-angle coverage into major thematic sections (e.g., "### 1. Red Sea Escalation & Economic Shockwaves").
 """
 
     return system_prompt, user_payload
