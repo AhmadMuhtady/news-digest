@@ -10,6 +10,7 @@ What it does:
 import os
 import re
 import gradio as gr
+import spaces
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -183,6 +184,13 @@ def bootstrap_pipeline_if_empty():
             "—",
             f"⚠️ Auto-pipeline failed on startup: {e}. Click 'Fetch & Dedupe Fresh News' to retry.",
         )
+@spaces.GPU
+def warmup():
+    # This function's body can just be `return True` or `pass`.
+    # It doesn't need to do anything real — HF's ZeroGPU platform
+    # just needs to detect one @spaces.GPU-decorated function existing
+    # in the file at startup, or it blocks the whole app.
+    ...
 
 def build_ui():
     """Constructs the Gradio Blocks layout."""
@@ -240,4 +248,5 @@ def build_ui():
 
 if __name__ == "__main__":
     app = build_ui()
+    warmup()
     app.launch()
