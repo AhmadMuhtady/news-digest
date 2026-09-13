@@ -1,36 +1,29 @@
-import os
-import json
-from difflib import SequenceMatcher
-
-
 """
 dedupe.py — Deduplication module for the news digest pipeline.
 
 What it does:
 - Loads the most recent raw articles JSON file from news-digest/data/.
+- Sorts articles newest-first by publishedAt timestamp to ensure deterministic ordering.
 - Removes exact duplicate URLs.
-- Identifies liveblogs (e.g., "live updates") and keeps only the latest snapshot per outlet.
-- Uses difflib fuzzy matching (threshold: 0.70) to catch syndicated wire stories across outlets.
+- Identifies liveblogs and collapses duplicate coverage per topic per outlet.
+- Uses difflib fuzzy matching (threshold: 0.70) to catch syndicated wire stories.
 - Writes cleaned dataset to news-digest/data/deduped_latest.json.
-
-Expected JSON output structure (data/deduped_latest.json):
-{
-  "metadata": {
-    "source_raw_file": "articles_YYYY-MM-DDTHH-MM-SS.json",
-    "original_count": 53,
-    "clean_count": 52,
-    "removed_count": 1
-  },
-  "articles": [...]
-}
 """
+
+import os
+import json
+import re
+from difflib import SequenceMatcher
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 
 
 def load_latest_raw_articles(data_dir=DATA_DIR):
-    """Finds and loads the most recent raw articles JSON file."""
+    """
+    Finds and loads the most recent raw articles JSON file using
+    deterministic string sorting on timestamped filenames.
+    """
     if not os.path.exists(data_dir):
         return None, None
         
@@ -41,15 +34,18 @@ def load_latest_raw_articles(data_dir=DATA_DIR):
     if not raw_files:
         return None, None
         
-    latest_file = max(raw_files, key=os.path.getctime)
-    with open(latest_file, "r", encoding="utf-8") as f:
-        data = json.load(f)
-        
-    return data.get("articles", []), latest_file
+    latest_file = max(raw_files, key=os.path.basename)
+    
+    try:
+        with open(latest_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("articles", []), latest_file
+    except (IOError, json.JSONDecodeError) as e:
+        print(f"Error loading {latest_file}: {e}")
+        return None, None
 
 
 def string_similarity(a, b):
-    """Calculates a similarity ratio between two strings (0.0 to 1.0)."""
     if not a or not b:
         return 0.0
     return SequenceMatcher(None, a.lower(), b.lower()).ratio()
@@ -64,19 +60,39 @@ def is_liveblog(article):
     return any(kw in title or kw in url for kw in live_keywords)
 
 
-def deduplicate_articles(articles, title_similarity_threshold=0.70):
+def extract_liveblog_topic(title):
+    """Strips punctuation and stop-words to generate a clean topic key."""
 
+    clean_title = re.sub(r'[^\w\s]', '', title.lower())
+    
+    stop_words = {"live", "updates", "war", "blog", "news", "coverage", "latest"}
+    words = [w for w in clean_title.split() if w not in stop_words]
+    
+    return "-".join(words[:4])
+
+
+def deduplicate_articles(articles, title_similarity_threshold=0.70):
+    """
+    Deduplicates articles based on URL uniqueness, scoped liveblog topic matching,
+    and title similarity for syndicated copy.
+    """
     if not articles:
         return []
 
+    sorted_articles = sorted(
+        articles, 
+        key=lambda x: x.get("publishedAt") or "", 
+        reverse=True
+    )
+
     seen_urls = set()
     unique_articles = []
-    liveblog_sources = set()
+    seen_liveblogs = set()
 
-    for article in articles:
+    for article in sorted_articles:
         url = article.get("url")
         title = article.get("title")
-        source_id = article.get("source", {}).get("id") or article.get("source", {}).get("name")
+        source_id = article.get("source", {}).get("id") or article.get("source", {}).get("name") or "unknown"
 
         if not title or not url:
             continue
@@ -87,10 +103,13 @@ def deduplicate_articles(articles, title_similarity_threshold=0.70):
 
 
         if is_liveblog(article):
-            if source_id in liveblog_sources:
+            topic_key = extract_liveblog_topic(title)
+            liveblog_signature = (source_id, topic_key)
 
+            if liveblog_signature in seen_liveblogs:
                 continue
-            liveblog_sources.add(source_id)
+                
+            seen_liveblogs.add(liveblog_signature)
             seen_urls.add(url)
             unique_articles.append(article)
             continue
@@ -98,7 +117,6 @@ def deduplicate_articles(articles, title_similarity_threshold=0.70):
 
         is_duplicate_title = False
         for accepted in unique_articles:
-
             if is_liveblog(accepted):
                 continue
                 
@@ -128,7 +146,6 @@ def run_deduplication():
     
     print(f"Deduplication complete: {removed_count} duplicates removed ({len(clean_articles)} retained).")
 
-
     output_path = os.path.join(DATA_DIR, "deduped_latest.json")
     payload = {
         "metadata": {
@@ -151,4 +168,19 @@ def run_deduplication():
 
 
 if __name__ == "__main__":
-    run_deduplication()
+    clean_articles = run_deduplication()
+    
+    if clean_articles:
+        print("\n--- Checking near-threshold candidate pairs (0.55 - 0.69) ---")
+        near_matches = 0
+        for i in range(len(clean_articles)):
+            for j in range(i + 1, len(clean_articles)):
+                sim = string_similarity(clean_articles[i]["title"], clean_articles[j]["title"])
+                if 0.55 <= sim < 0.70:
+                    near_matches += 1
+                    print(f"[{sim:.2f}] Candidate near threshold:")
+                    print(f"  A: {clean_articles[i]['title']}")
+                    print(f"  B: {clean_articles[j]['title']}\n")
+        
+        if near_matches == 0:
+            print("No articles found in the 0.55 - 0.69 similarity range.")
