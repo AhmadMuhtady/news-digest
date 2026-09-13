@@ -1,5 +1,5 @@
 """
-app.py — Interactive Web Interface & Groq LLM Synthesis Engine.
+app.py — Interactive Gradio UI & Groq LLM Synthesis Engine.
 """
 
 import os
@@ -7,7 +7,7 @@ import gradio as gr
 from openai import OpenAI
 from dotenv import load_dotenv
 
-
+# Import pipeline stages
 from fetch import run_fetch
 from dedupe import run_dedupe
 from digest import load_deduped_data, generate_llm_prompt
@@ -34,7 +34,6 @@ def fetch_active_chat_models():
 
     try:
         models = client.models.list()
-
         ignored_keywords = ["whisper", "guard", "orpheus", "embed"]
         chat_models = sorted([
             m.id for m in models.data
@@ -66,13 +65,11 @@ def synthesize_briefing(model_choice):
         yield "⚠️ **Error:** `GROQ_API_KEY` environment variable missing in `.env` file."
         return
 
-
     articles, metadata = load_deduped_data()
 
     if not articles:
         yield "⚠️ **Error:** No clean articles found on disk. Click **'Refresh Pipeline Data'** first."
         return
-
 
     sys_prompt, user_payload = generate_llm_prompt(articles)
 
@@ -86,7 +83,7 @@ def synthesize_briefing(model_choice):
             model=model_choice,
             messages=messages,
             temperature=0.2,
-            max_tokens=8192,  # Prevent mid-section truncation
+            max_tokens=8192,
             stream=True
         )
 
@@ -103,7 +100,6 @@ def synthesize_briefing(model_choice):
 def build_ui():
     active_models = fetch_active_chat_models()
     
-    # Load initial metrics
     articles, metadata = load_deduped_data()
     initial_count = f"{len(articles)} clean articles" if articles else "0 clean articles"
     initial_file = metadata.get("source_raw_file", "None") if metadata else "None"
@@ -128,16 +124,14 @@ def build_ui():
                 model_dropdown = gr.Dropdown(
                     label="Select Active Model",
                     choices=active_models,
-                    value=active_models[0] if active_models else "openai/gpt-oss-120b",
+                    value="openai/gpt-oss-120b" if "openai/gpt-oss-120b" in active_models else active_models[0],
                     interactive=True
                 )
 
                 generate_btn = gr.Button("🚀 Generate Executive Briefing", variant="primary")
 
-
             with gr.Column(scale=3):
                 output_markdown = gr.Markdown(label="Executive Briefing Output")
-
 
         refresh_btn.click(
             fn=refresh_pipeline,
