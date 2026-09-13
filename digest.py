@@ -1,11 +1,5 @@
 """
 digest.py — Generates a structured prompt payload and Markdown digest.
-
-What it does:
-- Loads news-digest/data/deduped_latest.json.
-- Prepares a formatted prompt payload for an LLM (e.g. OpenAI/Anthropic/Groq/Ollama).
-- Outputs a fallback human-readable Markdown digest directly to disk.
-- Writes output to news-digest/data/digest_report.md.
 """
 
 import os
@@ -36,7 +30,7 @@ def load_deduped_data(filepath=INPUT_FILE):
 def generate_llm_prompt(articles):
     """
     Formats raw articles into a clean text block designed specifically
-    to guide an LLM in clustering multifaceted news stories.
+    to guide an LLM in clustering multifaceted news stories with strict citations.
     """
     article_blocks = []
     for idx, art in enumerate(articles, 1):
@@ -56,18 +50,33 @@ def generate_llm_prompt(articles):
 
     articles_text = "\n\n".join(article_blocks)
 
-    system_prompt = """You are a Senior Investigative Foreign Affairs Editor specializing in the Middle East.
+    system_prompt = (
+        "You are a Senior Investigative Foreign Affairs Editor specializing in the Middle East. "
+        "Your task is to analyze raw news feeds and synthesize them into an Executive Intelligence Briefing."
+    )
 
-Your task is to analyze the provided list of raw news articles and produce a cohesive Executive Intelligence Briefing in Markdown format.
+    user_payload = f"""Analyze the provided list of {len(articles)} raw news articles and produce a cohesive Executive Intelligence Briefing in Markdown.
 
-Instructions:
-1. THEMATIC CLUSTERING: Do NOT summarize article-by-article. Instead, group related multi-angle coverage into major thematic sections (e.g., "Red Sea Escalation & Economic Impact", "Humanitarian & Displacement Updates").
-2. NARRATIVE SYNTHESIS: Combine different facts from multiple sources into a single fluid narrative per topic. Mention conflicting updates or different angles explicitly.
-3. CITATIONS: Use inline markdown links back to original article URLs when citing specific claims or statistics (e.g., [Al Jazeera reported...](URL)).
-4. EXECUTIVE SUMMARY: Include a top-level 3-bullet point executive takeaway at the start.
+--- BEGIN RAW ARTICLES ({len(articles)} total) ---
+
+{articles_text}
+
+--- END RAW ARTICLES ---
+
+CRITICAL FORMATTING & CITATION INSTRUCTIONS:
+1. MANDATORY INLINE CITATIONS: Every factual claim or summary bullet MUST include an inline Markdown hyperlink to its original article URL.
+   Format: [Source Name](URL)
+   Example: "Houthi forces seized key coastal positions in Yemen ([Al Jazeera](https://example.com/art1))."
+   Do NOT invent URLs; use the exact URL provided in the raw articles list above.
+
+2. EXECUTIVE TAKEAWAYS: Start with EXACTLY 3 bullet points under an "## Executive Takeaways" header. Do NOT use Markdown tables for takeaways.
+
+3. THEMATIC CLUSTERING: Do NOT summarize article-by-article. Group multi-angle coverage into major thematic sections (e.g., "### 1. Red Sea Escalation & Economic Shockwaves", "### 2. Regional Diplomatic Maneuvering").
+
+4. NARRATIVE SYNTHESIS: Combine different facts from multiple sources into a single fluid narrative per topic. Mention conflicting updates or different angles explicitly with citations.
 """
 
-    return system_prompt, f"--- BEGIN ARTICLES ({len(articles)} total) ---\n\n" + articles_text
+    return system_prompt, user_payload
 
 
 def build_fallback_markdown(articles, metadata):
@@ -105,10 +114,7 @@ def run_digest():
 
     print(f"Loaded {len(articles)} deduplicated articles.")
 
-
     sys_prompt, user_payload = generate_llm_prompt(articles)
-    
-
     fallback_report = build_fallback_markdown(articles, metadata)
     
     try:
@@ -117,11 +123,6 @@ def run_digest():
         print(f"Saved baseline digest report to: {OUTPUT_FILE}")
     except IOError as e:
         print(f"Failed to write digest report: {e}")
-
-    print("\n✅ Pipeline execution complete!")
-    print(f"   Fetch  -> Data saved in data/")
-    print(f"   Dedupe -> Cleaned ({len(articles)} retained)")
-    print(f"   Digest -> Markdown generated at data/digest_report.md")
 
 
 if __name__ == "__main__":
