@@ -79,4 +79,6 @@ python digest.py   # builds a fallback Markdown report
 
 ## Live demo
 
-Deployed on Hugging Face Spaces — link added once live.
+🚀 **[Try it live on Hugging Face Spaces](https://huggingface.co/spaces/Dayz81/news-digest)**
+
+Source: [github.com/AhmadMuhtady/news-digest](https://github.com/AhmadMuhtady/news-digest)
