@@ -4,6 +4,45 @@ import requests
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 
+
+"""
+fetch.py — Ingestion module for the news digest pipeline.
+
+What it does:
+- Queries NewsAPI's /v2/everything endpoint using server-side OR keyword queries.
+- Filters articles strictly by dynamic UTC time windows (hours_back) and up to 20 valid sources.
+- Handles network/API failure cases cleanly (timeouts, HTTP errors, and non-JSON HTML gateway errors).
+- Warns if results exceed NewsAPI's 100-article single-page cap (totalResults > fetched count).
+- Writes fetched articles + query metadata to a timestamped JSON file anchored in news-digest/data/.
+
+Expected JSON output structure (data/articles_YYYY-MM-DDTHH-MM-SS.json):
+{
+  "metadata": {
+    "fetched_at": "2026-09-13T04:15:00.123456+00:00",
+    "article_count": 2,
+    "query_params": {
+      "keywords": [countries you are intrested in],
+      "sources": ["al-jazeera-english", "bbc-news", "cnn", "reuters"],
+      "hours_back": 48
+    }
+  },
+  "articles": [
+    {
+      "source": {"id": "bbc-news", "name": "BBC News"},
+      "author": "BBC Staff",
+      "title": "Sample Article Title",
+      "description": "Short article description...",
+      "url": "https://www.bbc.co.uk/news/...",
+      "publishedAt": "2026-09-13T01:15:00Z",
+      "content": "Article snippet..."
+    }
+  ]
+}
+"""
+
+
+
+
 load_dotenv(override=True)
 NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 
