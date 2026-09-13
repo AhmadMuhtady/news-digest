@@ -1,3 +1,17 @@
+---
+title: News Digest
+emoji: 📰
+colorFrom: red
+colorTo: blue
+sdk: gradio
+sdk_version: 6.27.0
+python_version: '3.12'
+app_file: app.py
+pinned: false
+license: mit
+short_description: An end-to-end automated news intelligence pipeline.
+---
+
 # 📰 Middle East Executive Intelligence Digest
 
 A live news-synthesis pipeline that pulls real-time Middle East coverage from NewsAPI, deduplicates syndicated/liveblog coverage, and uses a Groq-hosted LLM to write a cited, thematically-organized executive briefing — served through an interactive Gradio dashboard.
